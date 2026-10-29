@@ -29,6 +29,7 @@ import { generateDaleAutomationPDF } from '../utils/pdfGenerator';
 import { storageService } from '../services/storageService';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import { SiteEquipmentDropdown } from './SiteEquipmentDropdown';
+import { ClientLocationRegisterSelector } from './ClientLocationRegisterSelector';
 
 interface ReportEditorProps {
   initialReport: Report;
@@ -408,45 +409,73 @@ export const ReportEditor: React.FC<ReportEditorProps> = ({ initialReport, onBac
 
         {/* 2-Column Details Box (Inspection Details & Asset Details) */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
-          {/* Column 1: Inspection Details */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-1.5">
-              Inspection Details
-            </h4>
-            <div className="grid grid-cols-3 gap-2 items-center">
-              <span className="text-xs font-medium text-slate-500">Report #:</span>
+          {/* Column 1: Inspection Details & Allocation Register */}
+          <div className="space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Inspection Details &amp; Allocation Register
+              </h4>
+              <span className="text-[10px] font-semibold text-slate-400">
+                Client &amp; Site Verified
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3 sm:items-center">
+              <span className="text-xs font-bold text-slate-700">Report #:</span>
               <input
                 type="text"
                 value={report.reportNumber}
                 onChange={(e) => setReport({ ...report, reportNumber: e.target.value })}
-                className="col-span-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900 font-mono-numbers"
+                className="sm:col-span-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900 font-mono-numbers"
               />
             </div>
-            <div className="grid grid-cols-3 gap-2 items-center">
-              <span className="text-xs font-medium text-slate-500">Location:</span>
-              <input
-                type="text"
-                value={report.location}
-                onChange={(e) => setReport({ ...report, location: e.target.value })}
-                className="col-span-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900"
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-2 items-center">
-              <span className="text-xs font-medium text-slate-500">Inspection Date:</span>
+
+            {/* Dropdown Allocator: Project/Client and Location with Creation Modals */}
+            <ClientLocationRegisterSelector
+              currentClient={report.summary.customBusinessFields.clientName}
+              currentLocation={report.location}
+              onClientChange={(clientName) => {
+                setReport((prev) => ({
+                  ...prev,
+                  summary: {
+                    ...prev.summary,
+                    customBusinessFields: {
+                      ...prev.summary.customBusinessFields,
+                      clientName,
+                    },
+                  },
+                }));
+              }}
+              onLocationChange={(locationText, facilityName, address) => {
+                setReport((prev) => ({
+                  ...prev,
+                  location: locationText,
+                  gps: {
+                    ...prev.gps,
+                    facilityName: facilityName || prev.gps.facilityName,
+                    address: address || locationText,
+                  },
+                }));
+              }}
+            />
+
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3 sm:items-center pt-2 border-t border-slate-100">
+              <span className="text-xs font-bold text-slate-700">Inspection Date:</span>
               <input
                 type="text"
                 value={report.inspectionDate}
                 onChange={(e) => setReport({ ...report, inspectionDate: e.target.value })}
-                className="col-span-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900 font-mono-numbers"
+                className="sm:col-span-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900 font-mono-numbers"
               />
             </div>
-            <div className="grid grid-cols-3 gap-2 items-center">
-              <span className="text-xs font-medium text-slate-500">Inspector Name:</span>
+
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3 sm:items-center">
+              <span className="text-xs font-bold text-slate-700">Inspector Name:</span>
               <input
                 type="text"
                 value={report.inspectorName}
                 onChange={(e) => setReport({ ...report, inspectorName: e.target.value })}
-                className="col-span-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900 font-semibold"
+                className="sm:col-span-2 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900 font-semibold"
               />
             </div>
           </div>

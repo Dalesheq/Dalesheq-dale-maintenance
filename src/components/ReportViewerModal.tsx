@@ -148,6 +148,7 @@ export const ReportViewerModal: React.FC<ReportViewerModalProps> = ({
                 Inspection Details
               </h3>
               <div className="flex"><span className="w-28 text-slate-500 font-medium">Report #:</span> <span className="font-bold font-mono-numbers">{report.reportNumber}</span></div>
+              <div className="flex"><span className="w-28 text-slate-500 font-medium">Project / Client:</span> <span className="font-bold text-sky-800">{report.summary.customBusinessFields?.clientName || 'General Client'}</span></div>
               <div className="flex"><span className="w-28 text-slate-500 font-medium">Location:</span> <span>{report.location}</span></div>
               <div className="flex"><span className="w-28 text-slate-500 font-medium">Inspection Date:</span> <span className="font-mono-numbers">{report.inspectionDate}</span></div>
               <div className="flex"><span className="w-28 text-slate-500 font-medium">Inspector Name:</span> <span className="font-semibold">{report.inspectorName}</span></div>

@@ -137,8 +137,11 @@ export async function generateDaleAutomationPDF(report: Report): Promise<jsPDF> 
     // Meta Box: 2 Columns (Inspection Details & Asset Details)
     doc.setFillColor(248, 250, 252); // slate-50
     doc.setDrawColor(203, 213, 225); // slate-300
+    // Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.3);
-    doc.roundedRect(margin, currentY, contentWidth, 34, 1.5, 1.5, 'FD');
+    doc.roundedRect(margin, currentY, contentWidth, 38, 1.5, 1.5, 'FD');
 
     const colWidth = contentWidth / 2;
 
@@ -152,15 +155,16 @@ export async function generateDaleAutomationPDF(report: Report): Promise<jsPDF> 
     doc.setFontSize(8);
     doc.setTextColor(71, 85, 105);
 
-    doc.text(`Report #: ${report.reportNumber}`, margin + 4, currentY + 11.5);
-    doc.text(`Location: ${report.location}`, margin + 4, currentY + 16.5);
-    doc.text(`Inspection Date: ${report.inspectionDate}`, margin + 4, currentY + 21.5);
-    doc.text(`Inspector Name: ${report.inspectorName}`, margin + 4, currentY + 26.5);
+    doc.text(`Report #: ${report.reportNumber}`, margin + 4, currentY + 11);
+    doc.text(`Project/Client: ${report.summary.customBusinessFields?.clientName || 'General Client'}`, margin + 4, currentY + 16);
+    doc.text(`Location: ${report.location}`, margin + 4, currentY + 21);
+    doc.text(`Inspection Date: ${report.inspectionDate}`, margin + 4, currentY + 26);
+    doc.text(`Inspector Name: ${report.inspectorName}`, margin + 4, currentY + 31);
 
     if (report.gps && report.gps.facilityName) {
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(2, 132, 199); // sky-600
-      doc.text(`GPS Verified: ${report.gps.facilityName} (${report.gps.latitude.toFixed(4)}, ${report.gps.longitude.toFixed(4)} ±${report.gps.accuracy}m)`, margin + 4, currentY + 31);
+      doc.text(`GPS Verified: ${report.gps.facilityName} (${report.gps.latitude.toFixed(4)}, ${report.gps.longitude.toFixed(4)})`, margin + 4, currentY + 35.5);
       doc.setTextColor(71, 85, 105);
     }
 
@@ -172,13 +176,13 @@ export async function generateDaleAutomationPDF(report: Report): Promise<jsPDF> 
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text(`Asset Category : ${report.assetDetails.category}`, margin + colWidth + 4, currentY + 11.5);
-    doc.text(`Asset Name : ${report.assetDetails.name}`, margin + colWidth + 4, currentY + 16.5);
-    doc.text(`Asset # : ${report.assetDetails.assetNumber}`, margin + colWidth + 4, currentY + 21.5);
-    doc.text(`Meter Reading : ${report.assetDetails.meterReading}`, margin + colWidth + 4, currentY + 26.5);
+    doc.text(`Asset Category : ${report.assetDetails.category}`, margin + colWidth + 4, currentY + 11);
+    doc.text(`Asset Name : ${report.assetDetails.name}`, margin + colWidth + 4, currentY + 16);
+    doc.text(`Asset # : ${report.assetDetails.assetNumber}`, margin + colWidth + 4, currentY + 21);
+    doc.text(`Meter Reading : ${report.assetDetails.meterReading}`, margin + colWidth + 4, currentY + 26);
     doc.text(`Model/Year : ${report.assetDetails.modelYear}`, margin + colWidth + 4, currentY + 31);
 
-    currentY += 38;
+    currentY += 42;
   };
 
   drawPageHeader();

@@ -2,6 +2,26 @@ import { Report, WorkOrder, PushNotification, UserProfile } from '../types';
 import { INITIAL_REPORTS, INITIAL_WORK_ORDERS, INITIAL_NOTIFICATIONS, USERS } from '../data/initialData';
 import { playAlertChime } from './audioNotification';
 import { REPORT_TEMPLATES, ReportTemplate } from '../data/reportTemplates';
+import { SITE_CATALOG } from '../data/siteCatalog';
+
+export interface CustomClient {
+  id: string;
+  name: string;
+  contactPerson?: string;
+  contactNumber?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CustomLocation {
+  id: string;
+  clientName: string;
+  facilityName: string;
+  region: string;
+  address?: string;
+  country?: string;
+  createdAt: string;
+}
 
 const STORAGE_KEYS = {
   REPORTS: 'dale_reports_v1',
@@ -12,6 +32,8 @@ const STORAGE_KEYS = {
   LAST_SYNCED: 'dale_last_synced_timestamp',
   SYNC_QUEUE: 'dale_sync_queue_ids',
   CUSTOM_TEMPLATES: 'dale_custom_templates_v1',
+  CUSTOM_CLIENTS: 'dale_custom_clients_v1',
+  CUSTOM_LOCATIONS: 'dale_custom_locations_v1',
 };
 
 class StorageService {
@@ -606,6 +628,135 @@ class StorageService {
     const custom = this.getCustomTemplates();
     // Return custom first, then built-in
     return [...custom, ...builtIn];
+  }
+
+  // ==========================================
+  // Clients / Projects Management
+  // ==========================================
+  public getCustomClients(): CustomClient[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.CUSTOM_CLIENTS);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public getClients(): string[] {
+    const catalogClients = SITE_CATALOG.map((f) => f.clientGroup).filter(Boolean);
+    const customClients = this.getCustomClients().map((c) => c.name).filter(Boolean);
+    const all = Array.from(new Set([...catalogClients, ...customClients]));
+    return all.sort((a, b) => a.localeCompare(b));
+  }
+
+  public addCustomClient(clientName: string, details?: Partial<CustomClient>): CustomClient {
+    const trimmed = clientName.trim();
+    const existing = this.getCustomClients();
+    const found = existing.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+    if (found) return found;
+
+    const newClient: CustomClient = {
+      id: `client-${Date.now()}`,
+      name: trimmed,
+      contactPerson: details?.contactPerson || '',
+      contactNumber: details?.contactNumber || '',
+      notes: details?.notes || '',
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [newClient, ...existing];
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_CLIENTS, JSON.stringify(updated));
+    this.notifyListeners();
+    return newClient;
+  }
+
+  // ==========================================
+  // Locations / Facilities Management
+  // ==========================================
+  public getCustomLocations(): CustomLocation[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.CUSTOM_LOCATIONS);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public getLocations(selectedClient?: string): {
+    id: string;
+    facilityName: string;
+    locationText: string;
+    clientName: string;
+    region: string;
+    address: string;
+    country: string;
+  }[] {
+    const list: {
+      id: string;
+      facilityName: string;
+      locationText: string;
+      clientName: string;
+      region: string;
+      address: string;
+      country: string;
+    }[] = [];
+
+    // Catalog locations
+    SITE_CATALOG.forEach((fac) => {
+      list.push({
+        id: fac.id,
+        facilityName: fac.name,
+        locationText: `${fac.name}, ${fac.region}`,
+        clientName: fac.clientGroup,
+        region: fac.region,
+        address: fac.locationAddress,
+        country: fac.country,
+      });
+    });
+
+    // Custom user locations
+    this.getCustomLocations().forEach((loc) => {
+      list.push({
+        id: loc.id,
+        facilityName: loc.facilityName,
+        locationText: `${loc.facilityName}, ${loc.region}`,
+        clientName: loc.clientName,
+        region: loc.region,
+        address: loc.address || `${loc.facilityName}, ${loc.region}`,
+        country: loc.country || 'South Africa',
+      });
+    });
+
+    if (selectedClient && selectedClient.trim() && selectedClient !== 'All') {
+      const q = selectedClient.toLowerCase().trim();
+      return list.filter((l) => l.clientName.toLowerCase().includes(q));
+    }
+
+    return list;
+  }
+
+  public addCustomLocation(data: {
+    clientName: string;
+    facilityName: string;
+    region: string;
+    address?: string;
+    country?: string;
+  }): CustomLocation {
+    const newLoc: CustomLocation = {
+      id: `loc-${Date.now()}`,
+      clientName: data.clientName.trim(),
+      facilityName: data.facilityName.trim(),
+      region: data.region.trim(),
+      address: data.address?.trim() || `${data.facilityName.trim()}, ${data.region.trim()}`,
+      country: data.country || 'South Africa',
+      createdAt: new Date().toISOString(),
+    };
+
+    const existing = this.getCustomLocations();
+    const updated = [newLoc, ...existing];
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_LOCATIONS, JSON.stringify(updated));
+    this.notifyListeners();
+    return newLoc;
   }
 
   public resetToFactoryDefaults() {
