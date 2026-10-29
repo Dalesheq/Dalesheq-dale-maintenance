@@ -1,0 +1,583 @@
+import React, { useState } from 'react';
+import {
+  FileText,
+  Plus,
+  Search,
+  Filter,
+  Eye,
+  Edit,
+  Download,
+  MapPin,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Sparkles,
+  ChevronRight,
+  Trash2,
+  ShieldAlert,
+  UploadCloud,
+} from 'lucide-react';
+import { Report, ReportType } from '../types';
+import { REPORT_TEMPLATES, ReportTemplate } from '../data/reportTemplates';
+import { generateDaleAutomationPDF } from '../utils/pdfGenerator';
+import { storageService } from '../services/storageService';
+import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+import { TemplateImportModal } from './TemplateImportModal';
+import { SiteEquipmentDropdown, SiteSelectionData } from './SiteEquipmentDropdown';
+import { SITE_CATALOG } from '../data/siteCatalog';
+
+interface ReportsListProps {
+  reports: Report[];
+  onSelectReport: (report: Report) => void;
+  onEditReport: (report: Report) => void;
+  onDeleteReport: (reportId: string) => void;
+  onCreateReportFromTemplate: (template: ReportTemplate, siteData?: SiteSelectionData) => void;
+  isTemplateModalOpen: boolean;
+  setIsTemplateModalOpen: (open: boolean) => void;
+  onOpenCustomBuilder?: () => void;
+}
+
+export const ReportsList: React.FC<ReportsListProps> = ({
+  reports,
+  onSelectReport,
+  onEditReport,
+  onDeleteReport,
+  onCreateReportFromTemplate,
+  isTemplateModalOpen,
+  setIsTemplateModalOpen,
+  onOpenCustomBuilder,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'submitted' | 'draft' | 'urgent'>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [inspectorFilter, setInspectorFilter] = useState<string>('all');
+  const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [modalSelectedSite, setModalSelectedSite] = useState<SiteSelectionData | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [reportToDelete, setReportToDelete] = useState<Report | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const currentUser = storageService.getCurrentUser();
+  const isAdmin = currentUser.role === 'admin';
+  const isManagement = storageService.isManagement();
+
+  const handleDeleteClick = (e: React.MouseEvent, report: Report) => {
+    e.stopPropagation();
+    setReportToDelete(report);
+  };
+
+  // Rule: Users may only see what pertains to them
+  const userScopedReports = React.useMemo(() => {
+    if (isManagement) return reports;
+    const nameLower = (currentUser.name || '').toLowerCase().trim();
+    const emailLower = (currentUser.email || '').toLowerCase().trim();
+    return reports.filter((r) => {
+      const inspector = (r.inspectorName || '').toLowerCase().trim();
+      const prepared = (r.preparedBy || '').toLowerCase().trim();
+      return inspector === nameLower || inspector.includes(nameLower) || prepared === emailLower;
+    });
+  }, [reports, currentUser, isManagement]);
+
+  const filteredReports = userScopedReports.filter((r) => {
+    const matchesSearch =
+      r.reportNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.assetDetails.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.assetDetails.assetNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.inspectorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.location.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesStatus =
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'urgent'
+        ? !r.summary.assetSafeToUse || r.summary.maintenancePriority === 'Urgent'
+        : r.approvalStatus === statusFilter;
+
+    const matchesType = typeFilter === 'all' ? true : r.reportType === typeFilter;
+
+    const matchesInspector =
+      !isManagement || inspectorFilter === 'all'
+        ? true
+        : r.inspectorName.toLowerCase().includes(inspectorFilter.toLowerCase());
+
+    const matchesSite =
+      siteFilter === 'all'
+        ? true
+        : r.location.toLowerCase().includes(siteFilter.toLowerCase()) ||
+          r.assetDetails.name.toLowerCase().includes(siteFilter.toLowerCase()) ||
+          r.assetDetails.assetNumber.toLowerCase().includes(siteFilter.toLowerCase()) ||
+          (r.gps?.facilityName || '').toLowerCase().includes(siteFilter.toLowerCase());
+
+    return matchesSearch && matchesStatus && matchesType && matchesInspector && matchesSite;
+  });
+
+  const handleDownloadPdf = async (e: React.MouseEvent, report: Report) => {
+    e.stopPropagation();
+    try {
+      setDownloadingId(report.id);
+      const pdf = await generateDaleAutomationPDF(report);
+      pdf.save(`${report.reportNumber.replace(/\s+/g, '_')}_Official_Report.pdf`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
+      {/* Top Welcome & Actions Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              {isManagement ? 'Management & Executive Oversight' : 'Field Operations · Technician Scope'}
+            </span>
+            <span className="text-slate-300">·</span>
+            <span className="text-xs font-semibold text-slate-700">Dale Automation</span>
+            {!isManagement && (
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200">
+                Logged in as {currentUser.name}
+              </span>
+            )}
+          </div>
+          <h2 className="mt-1 text-xl font-extrabold text-slate-900">
+            {isManagement
+              ? 'Machinery Commissioning, Inspection & Service Reports'
+              : 'My Field Inspection & Commissioning Reports'}
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {isManagement
+              ? 'Executive fleet overview across all Dale Automation plants, commissioning lines, and field engineers.'
+              : `Showing inspection sheets and commissioning records pertaining to ${currentUser.name}.`}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-800 shadow-2xs hover:bg-slate-50 transition-colors"
+          >
+            <UploadCloud className="h-4 w-4 text-red-600" />
+            Import Template (PDF/Excel/CSV)
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsTemplateModalOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Create New Report
+          </button>
+        </div>
+      </div>
+
+      {/* Admin Privileges Active Banner */}
+      {isAdmin && (
+        <div className="flex items-center justify-between rounded-xl border border-purple-200 bg-purple-50/70 p-3.5 text-xs">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-purple-700 shrink-0" />
+            <div>
+              <span className="font-bold text-purple-950">System Administrator Rights Active: </span>
+              <span className="text-purple-800">
+                You have global permissions to edit or permanently delete any report regardless of approval status.
+              </span>
+            </div>
+          </div>
+          <span className="rounded bg-purple-200 px-2 py-0.5 text-[10px] font-extrabold uppercase text-purple-900">
+            Admin Mode
+          </span>
+        </div>
+      )}
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-1 overflow-x-auto">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
+              statusFilter === 'all' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            All Reports ({userScopedReports.length})
+          </button>
+          <button
+            onClick={() => setStatusFilter('approved')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
+              statusFilter === 'approved' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Approved ({userScopedReports.filter((r) => r.approvalStatus === 'approved').length})
+          </button>
+          <button
+            onClick={() => setStatusFilter('submitted')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
+              statusFilter === 'submitted' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Pending Review ({userScopedReports.filter((r) => r.approvalStatus === 'submitted').length})
+          </button>
+          <button
+            onClick={() => setStatusFilter('urgent')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
+              statusFilter === 'urgent' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            🚨 Urgent Repairs ({userScopedReports.filter((r) => !r.summary.assetSafeToUse || r.summary.maintenancePriority === 'Urgent').length})
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Management Inspector Filter */}
+          {isManagement && (
+            <select
+              value={inspectorFilter}
+              onChange={(e) => setInspectorFilter(e.target.value)}
+              className="rounded-lg border border-purple-300 bg-purple-50/60 px-2.5 py-1.5 text-xs font-semibold text-purple-950 focus:border-purple-600 focus:outline-hidden"
+            >
+              <option value="all">All Inspectors (Fleet View)</option>
+              <option value="Kyle Kingma">Kyle Kingma</option>
+              <option value="Sean Frost">Sean Frost</option>
+              <option value="Raynard Kruger">Raynard Kruger</option>
+            </select>
+          )}
+
+          {/* Equipment Type Filter */}
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-slate-900 focus:outline-hidden"
+          >
+            <option value="all">All Machinery Types</option>
+            <option value="spiral_cooler_double_drum">Spiral Cooler (Double Drum)</option>
+            <option value="spiral_cooler_edge_drive">Spiral Cooler (Edge Drive)</option>
+            <option value="spiral_freezer">Spiral Freezer</option>
+            <option value="oven_inspection">Industrial Oven</option>
+            <option value="commissioning_chiller_pump">Pump Station &amp; Chiller</option>
+            <option value="training_register">Training Register</option>
+            <option value="service_van_tools">Service Van &amp; Rigging Tools</option>
+          </select>
+
+          {/* Official Plant Site Filter */}
+          <select
+            value={siteFilter}
+            onChange={(e) => setSiteFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-slate-900 focus:outline-hidden max-w-[210px] truncate"
+          >
+            <option value="all">All Sites &amp; Facilities ({SITE_CATALOG.length})</option>
+            {SITE_CATALOG.map((facility) => (
+              <option key={facility.id} value={facility.name}>
+                {facility.countryFlag} {facility.name} ({facility.assets.length} assets)
+              </option>
+            ))}
+          </select>
+
+          {/* Search Box */}
+          <div className="relative min-w-[200px]">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search reports..."
+              className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:border-slate-900 focus:outline-hidden"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Reports Grid */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {filteredReports.length === 0 ? (
+          <div className="col-span-full py-16 text-center text-xs text-slate-400">
+            No inspection reports match the search criteria. Tap "Create New Report" to begin a new inspection.
+          </div>
+        ) : (
+          filteredReports.map((report) => {
+            const isUnsafe = !report.summary.assetSafeToUse;
+
+            return (
+              <div
+                key={report.id}
+                onClick={() => onSelectReport(report)}
+                className={`group cursor-pointer rounded-xl border p-5 bg-white transition-all shadow-xs hover:shadow-md flex flex-col justify-between ${
+                  isUnsafe ? 'border-rose-300' : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div>
+                  {/* Top Header: Report #, Approval Badge, Sync Status */}
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <span className="font-extrabold text-xs text-slate-900 font-mono-numbers">
+                      {report.reportNumber}
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`rounded-sm px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          report.approvalStatus === 'approved'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : report.approvalStatus === 'submitted'
+                            ? 'bg-blue-100 text-blue-800'
+                            : report.approvalStatus === 'revision_requested'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {report.approvalStatus.replace('_', ' ')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Title & Asset */}
+                  <h3 className="mt-3 text-sm font-bold text-slate-900 leading-snug group-hover:text-blue-600 transition-colors">
+                    {report.title}
+                  </h3>
+
+                  <div className="mt-2 text-xs text-slate-600 space-y-1">
+                    <div className="font-semibold text-slate-800">{report.assetDetails.name}</div>
+                    <div className="text-[11px] text-slate-500 font-mono-numbers">
+                      {report.assetDetails.assetNumber} · {report.assetDetails.category}
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{report.location}</span>
+                    </div>
+                  </div>
+
+                  {/* Machinery Condition & Safe Indicator */}
+                  <div className="mt-4 rounded-lg bg-slate-50 p-2.5 border border-slate-100 space-y-1.5 text-[11px]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Condition:</span>
+                      <span className="font-semibold text-slate-800">{report.summary.overallCondition}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Safe to Operate:</span>
+                      {report.summary.assetSafeToUse ? (
+                        <span className="font-bold text-emerald-700">YES</span>
+                      ) : (
+                        <span className="font-bold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded">
+                          NO (RISK)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Photos &amp; Checks:</span>
+                      <span className="font-mono-numbers font-medium text-slate-700">
+                        {report.photos.length} photos · {report.sections.flatMap((s) => s.items).length} items
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Strip with Action Buttons */}
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <div className="text-[10px] text-slate-400 font-mono-numbers">
+                    {report.inspectionDate}
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Delete Action Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteClick(e, report)}
+                      className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs"
+                      title="Permanently delete this report"
+                    >
+                      <Trash2 className="h-3 w-3 text-rose-600" />
+                      <span>Delete</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditReport(report);
+                      }}
+                      className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                      title={isAdmin ? "ADMIN: Edit any report" : "Edit Report"}
+                    >
+                      <Edit className="h-3 w-3 text-slate-500" />
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleDownloadPdf(e, report)}
+                      disabled={downloadingId === report.id}
+                      className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                      title="Download PDF"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectReport(report);
+                      }}
+                      className="flex items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-slate-800"
+                    >
+                      <Eye className="h-3 w-3" />
+                      View
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* New Report Template Selection Modal */}
+      {isTemplateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-6 shadow-xl space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-200 pb-3">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Dale Automation Templates
+                </span>
+                <h3 className="text-base font-bold text-slate-900">
+                  Select Equipment Inspection &amp; Commissioning Template
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Pre-configured with standard industrial checklist items, sensor tests, and safety interlocks.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsTemplateModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <div className="text-xs text-slate-700">
+                <span className="font-bold text-slate-900 block">Have an existing checklist or need a custom sheet?</span>
+                Import directly from PDF, Excel (.xlsx, .xls) or CSV, or assemble custom checklists with pre-populated components.
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTemplateModalOpen(false);
+                    setIsImportModalOpen(true);
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-colors shadow-2xs inline-flex items-center gap-1.5"
+                >
+                  <UploadCloud className="h-3.5 w-3.5 text-red-600" />
+                  Import File
+                </button>
+                {onOpenCustomBuilder && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTemplateModalOpen(false);
+                      onOpenCustomBuilder();
+                    }}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors shadow-xs"
+                  >
+                    Open Custom Builder
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Site & Machinery Asset Selector in Template Modal */}
+            <div className="rounded-xl border border-red-200 bg-red-50/40 p-3.5 space-y-2">
+              <SiteEquipmentDropdown
+                selectedAssetNumber={modalSelectedSite?.assetNumber}
+                selectedFacilityName={modalSelectedSite?.facilityName}
+                label="Assign Plant Site & Machinery Asset (Optional — or select during inspection)"
+                onSelect={(siteData) => setModalSelectedSite(siteData)}
+              />
+              {modalSelectedSite && (
+                <div className="flex items-center justify-between text-[11px] text-red-950 bg-white/90 border border-red-200 px-3 py-1.5 rounded-lg shadow-2xs">
+                  <span>
+                    Selected for new inspection: <strong>{modalSelectedSite.facilityName}</strong> &bull; Asset{' '}
+                    <span className="font-mono font-bold text-red-700">{modalSelectedSite.assetNumber}</span> ({modalSelectedSite.assetName})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalSelectedSite(null)}
+                    className="text-xs font-bold text-red-600 hover:text-red-800 underline"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              {storageService.getAllTemplates().map((tmpl) => (
+                <div
+                  key={tmpl.type}
+                  onClick={() => {
+                    onCreateReportFromTemplate(tmpl, modalSelectedSite || undefined);
+                    setIsTemplateModalOpen(false);
+                    setModalSelectedSite(null);
+                  }}
+                  className="cursor-pointer rounded-xl border border-slate-200 p-4 hover:border-slate-400 hover:shadow-xs transition-all bg-slate-50/50 hover:bg-white flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1">
+                      <h4 className="text-xs font-bold text-slate-900">{tmpl.title}</h4>
+                      {tmpl.type.startsWith('custom_') && (
+                        <span className="text-[9px] font-extrabold uppercase bg-red-100 text-red-700 px-1.5 py-0.2 rounded">
+                          Custom
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-blue-600 font-semibold">{tmpl.defaultCategory}</span>
+                    <p className="mt-1 text-[11px] text-slate-600 line-clamp-2">{tmpl.description}</p>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-mono-numbers">
+                    <span>{tmpl.sections.length} sections · {tmpl.sections.flatMap((s) => s.items).length} checks</span>
+                    <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-end border-t border-slate-200 pt-3">
+              <button
+                type="button"
+                onClick={() => setIsTemplateModalOpen(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-app Delete Confirmation Modal (no window.confirm block) */}
+      <DeleteConfirmationModal
+        report={reportToDelete}
+        isOpen={Boolean(reportToDelete)}
+        onClose={() => setReportToDelete(null)}
+        onConfirm={(id) => {
+          onDeleteReport(id);
+          setReportToDelete(null);
+        }}
+      />
+
+      {/* Inspection Template Importer (PDF, Excel, CSV) */}
+      <TemplateImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onTemplateImportedAndSaved={(tmpl) => {
+          // Template is automatically saved to database by storageService inside modal
+        }}
+        onStartReportWithTemplate={(tmpl) => {
+          onCreateReportFromTemplate(tmpl);
+        }}
+      />
+    </div>
+  );
+};
